@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Spotify-inspired dark design system. All colors HSL. */
+
+@layer base {
+  :root {
+    /* Dark by default - this is a music app */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 141 76% 48%;
+    --primary-foreground: 0 0% 0%;
+    --primary-glow: 141 76% 60%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 63%;
+
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 16%;
+    --input: 0 0% 14%;
+    --ring: 141 76% 48%;
+
+    --radius: 0.75rem;
+
+    /* App-specific */
+    --surface-1: 0 0% 10%;
+    --surface-2: 0 0% 14%;
+    --surface-3: 0 0% 18%;
+    --player-bg: 0 0% 4%;
+
+    --gradient-hero: linear-gradient(180deg, hsl(141 76% 24% / 0.6) 0%, hsl(0 0% 7%) 70%);
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 14%) 0%, hsl(0 0% 10%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(141 76% 48%) 0%, hsl(141 76% 38%) 100%);
+
+    --shadow-player: 0 -8px 24px hsl(0 0% 0% / 0.6);
+    --shadow-card: 0 8px 24px hsl(0 0% 0% / 0.5);
+
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 80%;
+    --sidebar-primary: 141 76% 48%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 141 76% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Hide scrollbars on mobile but keep scrollable */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+@layer utilities {
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+
+  .bg-gradient-hero { background: var(--gradient-hero); }
+  .bg-gradient-card { background: var(--gradient-card); }
+  .bg-gradient-primary { background: var(--gradient-primary); }
+
+  .shadow-player { box-shadow: var(--shadow-player); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+
+  .line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
