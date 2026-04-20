@@ -40,12 +40,21 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 function downloadFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const isNative = /iPad|iPhone|iPod|Android/.test(navigator.userAgent);
 
+  // Use Web Share API on mobile (iOS + Android)
+  if (isNative && navigator.canShare?.({ files: [new File([blob], filename)] })) {
+    const file = new File([blob], filename, { type: blob.type });
+    navigator.share({ files: [file], title: filename })
+      .finally(() => URL.revokeObjectURL(url));
+    return;
+  }
+
+  // Fallback for desktop
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
-
   URL.revokeObjectURL(url);
 }
 export async function importLibrary(file: File) {

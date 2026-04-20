@@ -111,7 +111,13 @@ export function FullPlayer() {
           {/* Info */}
           <div className="flex items-start justify-between gap-3 px-6 pt-6">
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-2xl font-bold">{decodeHtml(current.name)}</h2>
+              <Link
+                to={current.album?.id ? `/album/${current.album.id}` : "#"}
+                onClick={() => setExpanded(false)}
+                className="block truncate text-2xl font-bold hover:underline"
+              >
+                {decodeHtml(current.name)}
+              </Link>
               <Link
                 to={current.artists?.primary?.[0]?.id ? `/artist/${current.artists.primary[0].id}` : "#"}
                 onClick={() => setExpanded(false)}

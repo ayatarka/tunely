@@ -5,6 +5,7 @@ import { usePlayer } from "@/store/player";
 import { downloadForOffline } from "@/lib/downloads";
 import { idb } from "@/lib/db";
 import { useEffect, useState, type MouseEvent } from "react";
+
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -62,13 +63,26 @@ export function SongRow({ song, index, queue, showAlbum, onPlay }: Props) {
   };
 
   return (
-    <div
-      onClick={handlePlay}
-      className={cn(
-        "group flex items-center gap-3 rounded-lg p-2 transition-colors cursor-pointer hover:bg-surface-2 active:bg-surface-3",
-        isCurrent && "bg-surface-2",
-      )}
-    >
+   <div
+  onClick={() => {
+    const history = JSON.parse(localStorage.getItem("search_history") || "[]");
+    const updated = [
+      {
+        id: song.id,
+        name: decodeHtml(song.name),
+        image: bestImage(song.image),
+        type: "song",
+      },
+      ...history.filter((x: any) => x.id !== song.id),
+    ].slice(0, 10);
+    localStorage.setItem("search_history", JSON.stringify(updated));
+    handlePlay();
+  }}
+  className={cn(
+    "group flex items-center gap-3 rounded-lg p-2 transition-colors cursor-pointer hover:bg-surface-2 active:bg-surface-3",
+    isCurrent && "bg-surface-2",
+  )}
+>
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-surface-3">
         {bestImage(song.image) && (
           <img src={bestImage(song.image)} alt={decodeHtml(song.name)} className="h-full w-full object-cover" loading="lazy" />
