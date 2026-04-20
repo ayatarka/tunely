@@ -29,6 +29,10 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Remove Windows JDK path from gradle.properties
+        run: |
+          sed -i '/org.gradle.java.home/d' android/gradle.properties || true
+
       - name: Build debug APK
         run: |
           cd android
