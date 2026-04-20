@@ -15,34 +15,14 @@ export default function Artist() {
   const [albumSubSection, setAlbumSubSection] = useState<"albums" | "eps">("albums");
   const playQueue = usePlayer((s) => s.playQueue);
 
-  useEffect(() => {
-    if (!id) return;
-    saavn.artist(id).then(async (a) => {
-      setArtist(a);
-      let top = a.topSongs ?? [];
-      // Fallback: many English artist pages return empty topSongs.
-      if (top.length === 0 && a.name) {
-        try {
-          const r = await saavn.searchSongs(a.name, 30);
-          top = r.results;
-        } catch {}
-      }
-      setSongs(top);
-
-      if (a.topAlbums && a.topAlbums.length > 0) {
-        setAlbums(a.topAlbums);
-      } else if (a.name) {
-        try {
-          const albumSearch = await saavn.searchAlbums(a.name, 20);
-          setAlbums(albumSearch.results);
-        } catch {
-          setAlbums([]);
-        }
-      } else {
-        setAlbums([]);
-      }
-    });
-  }, [id]);
+ useEffect(() => {
+  if (!id) return;
+  saavn.artist(id).then((a) => {
+    setArtist(a);
+    setSongs(a.topSongs ?? []);
+    setAlbums(a.topAlbums ?? []);
+  });
+}, [id]);
 
   if (!artist) return <div className="p-6 text-muted-foreground">Loading…</div>;
   const cover = bestImage(artist.image);
@@ -53,9 +33,14 @@ export default function Artist() {
     return yearB - yearA; // Newest first
   });
 
-  const allAlbums = sortByYear(albums.filter((a) => (a.songCount ?? 0) > 6));
-  const allEps = sortByYear(albums.filter((a) => (a.songCount ?? 0) <= 6 && (a.songCount ?? 0) > 0));
-
+ const allAlbums = sortByYear(albums.filter((a) => {
+  const count = Number(a.songCount) || 0;
+  return count === 0 || count > 6; // 0 means unknown, show as album by default
+}));
+const allEps = sortByYear(albums.filter((a) => {
+  const count = Number(a.songCount) || 0;
+  return count > 0 && count <= 6;
+}));
   return (
     <div className="pb-4">
       <div className="relative h-64 w-full overflow-hidden">

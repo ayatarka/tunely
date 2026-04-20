@@ -12,6 +12,16 @@ async function call<T = any>(path: string, params: Record<string, string | numbe
   return (json?.data ?? ({} as T));
 }
 
+async function callRaw<T = any>(path: string, params: Record<string, string | number> = {}): Promise<T> {
+  const base = `${HOST}${path}`;
+  const qs = new URLSearchParams(
+    Object.entries(params).map(([k, v]) => [k, String(v)])
+  ).toString();
+  const fullUrl = qs ? `${base}?${qs}` : base;
+  const res = await fetch(fullUrl);
+  if (!res.ok) throw new Error(`Saavn ${res.status}: ${fullUrl}`);
+  return res.json() as Promise<T>;
+}
 // --- Public types -----------------------------------------------------------
 
 export interface SaavnImage { quality: string; url: string }
@@ -62,13 +72,11 @@ export interface SaavnArtist {
 
 function imageSet(raw: any): SaavnImage[] {
   if (!raw) return [];
-  // Already-shaped array of {quality, link|url}
   if (Array.isArray(raw)) {
     return raw
       .filter((i) => i && (i.link || i.url))
       .map((i) => ({ quality: i.quality, url: (i.link ?? i.url).replace(/^http:\/\//, "https://") }));
   }
-  // Plain string URL — synthesize the three usual sizes
   const base = String(raw).replace(/^http:\/\//, "https://");
   return [
     { quality: "50x50", url: base.replace(/(150x150|500x500)/, "50x50") },
@@ -106,7 +114,6 @@ function mapArtistsFromAlbum(a: any): SaavnArtistsBlock {
       all: (a.artists ?? []).map(toMini),
     };
   }
-  // Album details endpoint returns plain strings
   return {
     primary: splitArtistList(a?.primaryArtists, a?.primaryArtistsId),
     featured: [],
@@ -162,6 +169,7 @@ function mapArtistLite(a: any): SaavnArtist {
   };
 }
 
+
 // --- API surface ------------------------------------------------------------
 
 export const saavn = {
@@ -177,23 +185,28 @@ export const saavn = {
       artists: { results: artists.results },
     };
   },
+
   searchSongs: async (q: string, limit = 30) => {
     const d = await call<any>("/search/songs", { query: q, limit });
     return { results: (d?.results ?? []).map(mapSong) as SaavnSong[], total: d?.total ?? 0 };
   },
+
   searchAlbums: async (q: string, limit = 20) => {
     const d = await call<any>("/search/albums", { query: q, limit });
     return { results: (d?.results ?? []).map(mapAlbumLite) as SaavnAlbum[], total: d?.total ?? 0 };
   },
+
   searchArtists: async (q: string, limit = 20) => {
     const d = await call<any>("/search/artists", { query: q, limit });
     return { results: (d?.results ?? []).map(mapArtistLite) as SaavnArtist[], total: d?.total ?? 0 };
   },
+
   song: async (id: string) => {
     const d = await call<any>("/songs", { id });
     const list = Array.isArray(d) ? d : (d?.songs ?? []);
     return { songs: list.map(mapSong) as SaavnSong[] };
   },
+
   album: async (id: string): Promise<SaavnAlbum> => {
     const d = await call<any>("/albums", { id });
     const songs = (d?.songs ?? []).map(mapSong) as SaavnSong[];
@@ -208,81 +221,122 @@ export const saavn = {
       songs,
     };
   },
+
   artist: async (id: string): Promise<SaavnArtist> => {
-    const d = await call<any>("/artists", { id });
-    let topSongs: SaavnSong[] = [];
-    try {
-      const songsData = await call<any>(`/artists/${id}/songs`);
-      const list = Array.isArray(songsData) ? songsData : (songsData?.songs ?? []);
-      topSongs = list.map(mapSong);
-    } catch { /* ignore */ }
-    return {
-      id: String(d.id ?? id),
-      name: d.name,
-      image: imageSet(d.image),
-      followerCount: Number(d.followerCount) || undefined,
-      fanCount: d.fanCount,
-      bio: typeof d.bio === "string"
-        ? safeBio(d.bio)
-        : Array.isArray(d.bio) && d.bio.length
-          ? d.bio.map((b: any) => `${b.title ? b.title + "\n\n" : ""}${b.text ?? ""}`).join("\n\n")
-          : "",
-      topSongs,
-      topAlbums: [],
-    };
-  },
+  const d = await call<any>("/artists", { id });
+
+  // --- top songs ---
+  let topSongs: SaavnSong[] = [];
+  try {
+    const res = await fetch(`${HOST}/artists/${id}/songs`);
+    const json = await res.json();
+    const rawList: any[] = json?.data?.results ?? json?.data?.songs ?? [];
+    topSongs = rawList
+      .filter((s) => {
+        const ids = String(s.primaryArtistsId ?? "").split(",").map((x) => x.trim());
+        return ids.includes(id);
+      })
+      .map(mapSong);
+  } catch { /* ignore */ }
+
+  // --- albums: paginate ---
+ let topAlbums: SaavnAlbum[] = [];
+
+try {
+  let page = 1;
+  const allRaw: any[] = [];
+  const seenIds = new Set<string>();
+
+  while (true) {
+    const res = await fetch(`${HOST}/artists/${id}/albums?page=${page}`);
+    const json = await res.json();
+
+    const raw: any[] = json?.data?.results ?? [];
+
+    // stop condition: no more data
+    if (!raw.length) break;
+
+    // deduplicate
+    const newItems = raw.filter((a) => !seenIds.has(String(a.id)));
+    if (newItems.length === 0) break;
+
+    newItems.forEach((a) => seenIds.add(String(a.id)));
+    allRaw.push(...newItems);
+
+    // stop if API says last page
+    if (json?.data?.lastPage === true) break;
+
+    page++;
+
+    // safety limit (avoid infinite loop)
+    if (page > 50) break;
+  }
+
+  topAlbums = allRaw.map(mapAlbumLite);
+} catch (e) {
+  console.log("album fetch error", e);
+}
+
+  return {
+    id: String(d.id ?? id),
+    name: d.name,
+    image: imageSet(d.image),
+    followerCount: Number(d.followerCount) || undefined,
+    fanCount: d.fanCount,
+    bio: typeof d.bio === "string"
+      ? safeBio(d.bio)
+      : Array.isArray(d.bio) && d.bio.length
+        ? d.bio.map((b: any) => `${b.title ? b.title + "\n\n" : ""}${b.text ?? ""}`).join("\n\n")
+        : "",
+    topSongs,
+    topAlbums,
+  };
+},
   artistSongs: async (id: string, page = 0) => {
     try {
-      const d = await call<any>(`/artists/${id}/songs`, { page });
-      const list = Array.isArray(d) ? d : (d?.songs ?? d?.results ?? []);
-      return { songs: list.map(mapSong) as SaavnSong[], total: list.length };
+      const json = await callRaw<any>(`/artists/${id}/songs`, { page });
+      const rawList: any[] = json?.data?.results ?? json?.data?.songs ?? [];
+      const songs = rawList
+        .filter((s) => {
+          const ids = String(s.primaryArtistsId ?? "").split(",").map((x) => x.trim());
+          return ids.includes(id);
+        })
+        .map(mapSong);
+      return { songs, total: json?.data?.total ?? songs.length };
     } catch {
       return { songs: [] as SaavnSong[], total: 0 };
     }
   },
- lyrics: async (songId: string) => {
-  try {
-    // 1. get song info from Saavn first
-    const d = await call<any>("/songs", { id: songId });
-    const song = Array.isArray(d) ? d[0] : d?.songs?.[0];
 
-    if (!song) return null;
+  lyrics: async (songId: string) => {
+    try {
+      const d = await call<any>("/songs", { id: songId });
+      const song = Array.isArray(d) ? d[0] : d?.songs?.[0];
 
-    const artist =
-      song.primaryArtists ||
-      song.artists?.primary?.map((a: any) => a.name).join(", ") ||
-      "";
+      if (!song) return null;
 
-    const title = song.name;
+      const artist =
+        song.primaryArtists ||
+        song.artists?.primary?.map((a: any) => a.name).join(", ") ||
+        "";
+      const title = song.name;
 
-    // 2. try LRCLIB first (better lyrics)
-    const lrc = await fetchLrcLibLyrics(artist, title);
+      const lrc = await fetchLrcLibLyrics(artist, title);
+      if (lrc?.lyrics) {
+        return { lyrics: lrc.lyrics, syncedLyrics: lrc.syncedLyrics ?? null, source: "lrclib" };
+      }
 
-    if (lrc?.lyrics) {
-      return {
-        lyrics: lrc.lyrics,
-        syncedLyrics: lrc.syncedLyrics ?? null,
-        source: "lrclib",
-      };
+      const saavnLyrics = await call<any>("/lyrics", { id: songId });
+      if (saavnLyrics?.lyrics) {
+        return { lyrics: saavnLyrics.lyrics, syncedLyrics: saavnLyrics.syncedLyrics ?? null, source: "saavn" };
+      }
+
+      return null;
+    } catch {
+      return null;
     }
+  },
 
-    // 3. fallback to Saavn lyrics
-    const saavnLyrics = await call<any>("/lyrics", { id: songId });
-
-    if (saavnLyrics?.lyrics) {
-      return {
-  lyrics: saavnLyrics.lyrics,
-  syncedLyrics: saavnLyrics.syncedLyrics ?? null,
-  source: "saavn",
-};
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-},
-  // Kept for backward compatibility; new API exposes direct URLs already.
   resolveAudioUrl: async (encrypted: string) => encrypted,
 };
 
@@ -293,29 +347,19 @@ function safeBio(s: string): string {
     return s;
   } catch { return s; }
 }
+
 // --- Lyrics helper (LRCLIB) -----------------------------------------------
 
 async function fetchLrcLibLyrics(artist: string, track: string) {
-  const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(
-    artist
-  )}&track_name=${encodeURIComponent(track)}`;
-
+  const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(track)}`;
   const res = await fetch(url);
   if (!res.ok) return null;
-
   const data = await res.json();
-
-  // ✅ LRCLIB uses plainLyrics (NOT "lyrics")
   const lyrics = data?.plainLyrics || data?.lyrics;
-
   if (!lyrics) return null;
-
-  return {
-    lyrics,
-    syncedLyrics: data?.syncedLyrics || null,
-    source: "lrclib",
-  };
+  return { lyrics, syncedLyrics: data?.syncedLyrics || null, source: "lrclib" };
 }
+
 // --- Display helpers --------------------------------------------------------
 
 export function bestImage(images?: SaavnImage[]): string {
